@@ -8,30 +8,30 @@ import (
 )
 
 var (
-	fmtInt     func(int64, int) string                   = strconv.FormatInt
-	atoi       func(string) (int, error)                 = strconv.Atoi
-	itoa       func(int) string                          = strconv.Itoa
-	mkerr      func(string) error                        = errors.New
-	fields     func(string) []string                     = strings.Fields
-	trimS      func(string) string                       = strings.TrimSpace
-	trimL      func(string, string) string               = strings.TrimLeft
-	trimR      func(string, string) string               = strings.TrimRight
-	trimPfx    func(string, string) string               = strings.TrimPrefix
-	trimSfx    func(string, string) string               = strings.TrimSuffix
-	hasPfx     func(string, string) bool                 = strings.HasPrefix
-	hasSfx     func(string, string) bool                 = strings.HasSuffix
-	join       func([]string, string) string             = strings.Join
-	split      func(string, string) []string             = strings.Split
-	splitN     func(string, string, int) []string        = strings.SplitN
-	stridx     func(string, string) int                  = strings.Index
-	idxr       func(string, rune) int                    = strings.IndexRune
-	repAll     func(string, string, string) string       = strings.ReplaceAll
-	puint      func(string, int, int) (uint64, error)    = strconv.ParseUint
-	fuint      func(uint64, int) string                  = strconv.FormatUint
-	streqf     func(string, string) bool                 = strings.EqualFold
-	trim       func(string, string) string               = strings.Trim
-	valOf      func(any) reflect.Value                   = reflect.ValueOf
-	typeOf     func(any) reflect.Type                    = reflect.TypeOf
+	lc      func(string) string                    = strings.ToLower
+	fmtInt  func(int64, int) string                = strconv.FormatInt
+	atoi    func(string) (int, error)              = strconv.Atoi
+	itoa    func(int) string                       = strconv.Itoa
+	fields  func(string) []string                  = strings.Fields
+	trimS   func(string) string                    = strings.TrimSpace
+	trimL   func(string, string) string            = strings.TrimLeft
+	trimR   func(string, string) string            = strings.TrimRight
+	trimPfx func(string, string) string            = strings.TrimPrefix
+	trimSfx func(string, string) string            = strings.TrimSuffix
+	hasPfx  func(string, string) bool              = strings.HasPrefix
+	hasSfx  func(string, string) bool              = strings.HasSuffix
+	join    func([]string, string) string          = strings.Join
+	split   func(string, string) []string          = strings.Split
+	splitN  func(string, string, int) []string     = strings.SplitN
+	stridx  func(string, string) int               = strings.Index
+	idxr    func(string, rune) int                 = strings.IndexRune
+	repAll  func(string, string, string) string    = strings.ReplaceAll
+	puint   func(string, int, int) (uint64, error) = strconv.ParseUint
+	fuint   func(uint64, int) string               = strconv.FormatUint
+	streqf  func(string, string) bool              = strings.EqualFold
+	trim    func(string, string) string            = strings.Trim
+	valOf   func(any) reflect.Value                = reflect.ValueOf
+	typeOf  func(any) reflect.Type                 = reflect.TypeOf
 )
 
 /*
@@ -39,15 +39,30 @@ isPtr returns a Boolean value indicative of whether kind
 reflection revealed the presence of a pointer type.
 */
 func isPtr(x any) bool {
-        return typeOf(x).Kind() == reflect.Ptr
+	return typeOf(x).Kind() == reflect.Ptr
+}
+
+func mkerr(msgs ...string) error {
+	if len(msgs) == 0 {
+		return nil
+	} else if len(msgs) == 1 {
+		return errors.New(msgs[0])
+	}
+
+	e := &strings.Builder{}
+	for _, msg := range msgs {
+		e.WriteString(msg)
+	}
+
+	return errors.New(e.String())
 }
 
 func errorBadLength(name string, length int) error {
-        return mkerr(`Invalid length '` + fmtInt(int64(length), 10) + `' for ` + name)
+	return mkerr(`Invalid length '` + fmtInt(int64(length), 10) + `' for ` + name)
 }
 
 func errorBadType(name string) error {
-        return mkerr(`Incompatible input type for ` + name)
+	return mkerr(`Incompatible input type for ` + name)
 }
 
 func removeWHSP(a string) string {
@@ -174,4 +189,3 @@ func assertString(x any, min int, name string) (str string, err error) {
 
 	return
 }
-
