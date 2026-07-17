@@ -376,7 +376,7 @@ func subtreeExclusions(raw string, begin int) (excl SpecificExclusions, end int,
 	for i := 0; i < len(values); i += 2 {
 		var ex SpecificExclusion
 		if !strInSlice(values[i], []string{`chopBefore`, `chopAfter`}) {
-			err = mkerr("Unexpected key '" + values[i] + "'")
+			err = mkerr("Unexpected key '", values[i], "'")
 			break
 
 		}
@@ -557,6 +557,11 @@ type Refinement interface {
 	// the receiver instance.
 	String() string
 
+	// Verify returns an error following an attempt to
+	// resolve all RefinementItem OID instances that are
+	// encountered within the receiver instance.
+	Verify() error
+
 	// Choice returns the string CHOICE "name" of the
 	// receiver instance. Use of this method is merely
 	// intended as a convenient alternative to type
@@ -642,6 +647,24 @@ func (r RefinementAnd) String() (s string) {
 }
 
 /*
+Verify returns an error following an attempt to resolve any enclosed
+[RefinementItem] objectClass OIDs.
+*/
+func (r RefinementAnd) Verify() (err error) {
+	L := r.Len()
+	if L == 0 {
+		err = mkerr("RefinementAnd: zero length")
+		return
+	}
+
+	for i := 0; i < L && err == nil; i++ {
+		err = r.Index(i).Verify()
+	}
+
+	return
+}
+
+/*
 Type returns the string literal "and" as the ASN.1 CHOICE.
 */
 func (r RefinementAnd) Choice() string {
@@ -709,6 +732,24 @@ func (r RefinementOr) String() (s string) {
 }
 
 /*
+Verify returns an error following an attempt to resolve any enclosed
+[RefinementItem] objectClass OIDs.
+*/
+func (r RefinementOr) Verify() (err error) {
+	L := r.Len()
+	if L == 0 {
+		err = mkerr("RefinementAnd: Or length")
+		return
+	}
+
+	for i := 0; i < L && err == nil; i++ {
+		err = r.Index(i).Verify()
+	}
+
+	return
+}
+
+/*
 Type returns the string literal "or" as the ASN.1 CHOICE.
 */
 func (r RefinementOr) Choice() string {
@@ -759,6 +800,20 @@ func (r RefinementNot) String() string {
 }
 
 /*
+Verify returns an error following an attempt to resolve any enclosed
+[RefinementItem] objectClass OIDs.
+*/
+func (r RefinementNot) Verify() (err error) {
+	if r.IsZero() {
+		err = mkerr("RefinementNot: nil instance")
+		return
+	}
+
+	err = r.Refinement.Verify()
+	return
+}
+
+/*
 Type returns the string literal "not" as the ASN.1 CHOICE.
 */
 func (r RefinementNot) Choice() string {
@@ -801,6 +856,7 @@ func (r invalidRefinement) String() string         { return `` }
 func (r invalidRefinement) IsZero() bool           { return false }
 func (r invalidRefinement) Len() int               { return 0 }
 func (r invalidRefinement) Index(_ int) Refinement { return invalidRefinement{} }
+func (r invalidRefinement) Verify() error          { return mkerr("Invalid Refinement") }
 func (r invalidRefinement) Choice() string         { return `invalid` }
 
 /*
@@ -824,6 +880,15 @@ func (r RefinementItem) String() (s string) {
 		s = `item:` + string(r)
 	}
 
+	return
+}
+
+/*
+Verify returns an error following an attempt to resolve any enclosed
+[RefinementItem] objectClass OIDs.
+*/
+func (r RefinementItem) Verify() (err error) {
+	_, err = Resolve(string(r))
 	return
 }
 
@@ -898,18 +963,24 @@ func subtreeRefinement(x any, begin ...int) (ref Refinement, err error) {
 	} else if hasPfx(input, "not:") {
 		ref, err = parseNot(input)
 	} else {
-		err = mkerr("invalid refinement: " + input)
+		err = mkerr("invalid refinement: ", input)
 	}
 
 	return
 }
 
 func parseItem(input string) (Refinement, error) {
+	var ref Refinement = invalidRefinement{}
 	parts := splitN(input, ":", 2)
 	if len(parts) != 2 {
-		return nil, mkerr("invalid item: " + input)
+		return ref, mkerr("invalid item: ", input)
 	}
-	return RefinementItem(parts[1]), nil
+
+	res, err := Resolve(parts[1])
+	if err == nil {
+		ref = RefinementItem(res)
+	}
+	return ref, err
 }
 
 func parseAnd(input string) (Refinement, error) {
@@ -978,3 +1049,147 @@ func splitRefinementParts(input string) []string {
 	return parts
 }
 
+/*
+RegisterOID assigns the provided numeric OID o and its descriptor(s)
+d to a forward and reverse map, e.g.:
+
+	OIDFwdMap[<descr>] = <numeric oid> (string to string)
+	OIDFwdMap[<numeric oid>] = [<descr(s)>...] (string to []string)
+
+OIDs represent LDAP Object Classes in either form, whether they're
+expressed as a descriptor or numeric OID.
+
+If the [OIDRevMap] contains at least one (1) entry, subsequent
+[RefinementItem] parsing routines will attempt to resolve numeric
+OIDs encountered (e.g.: "2.5.6.6") to the principal descriptor.
+If a given numeric OID is unregistered, an error is raised.
+
+If the [OIDFwdMap] contains at least one (1) entry, subsequent
+[RefinementItem] parsing routines will attempt to verify the
+specified descriptor (e.g.: "person") is a known objectClass:
+that is, it has been associated with a numeric OID. If a given
+descriptor is unregistered, an error is raised.
+
+Use of this function will initialize the two respective maps
+if not already initialized.
+*/
+func RegisterOID(o string, d ...string) (err error) {
+	if OIDFwdMap == nil {
+		OIDFwdMap = make(map[string]string)
+	}
+	if OIDRevMap == nil {
+		OIDRevMap = make(map[string][]string)
+	}
+
+	dl := len(d)
+
+	if dl == 0 {
+		err = mkerr("Cannot register OID without at least one descriptor")
+		return
+	} else if o == "" {
+		err = mkerr("Cannot register zero length numeric OID")
+		return
+	}
+
+	// this is an all-or-nothing approach.
+	// all descriptors must be non zero.
+	var tempD []string
+	for i := 0; i < dl && err == nil; i++ {
+		if d[i] == "" {
+			err = mkerr("Cannot register zero-length descriptor")
+		}
+	}
+
+	if err == nil {
+		OIDRevMap[o] = tempD
+		for i := 0; i < dl; i++ {
+			OIDFwdMap[d[i]] = o
+		}
+	}
+
+	return
+}
+
+func useRevMap() bool { return OIDRevMap != nil && len(OIDRevMap) > 0 }
+func useFwdMap() bool { return OIDFwdMap != nil && len(OIDFwdMap) > 0 }
+
+/*
+Resolve returns a string descr alongside an error following an attempt
+to resolve the input argument id to a known LDAP Object Class descriptor.
+This method is called during [RefinementItem] parsing.
+
+If a numeric OID is input, and is resolved, the resolved descr is returned.
+
+If a descr OID is input, and is resolved, the original descr is returned.
+
+If neither of the above cases produced a known descriptor, an error is
+returned.
+
+If OID resolution is not in use -- that is, neither [OIDFwdMap] nor [OIDRevMap]
+are initialized, each with at least one entry -- this function silently returns
+the original id input argument with no error.
+*/
+func Resolve(id string) (descr string, err error) {
+	if !(useRevMap() || useFwdMap()) {
+		descr = id // return id as-is, no resolver in use.
+		return
+	}
+
+	if len(id) == 0 {
+		err = mkerr("Bad Refinement Item; must be an objectClass numeric/descr OID")
+		return
+	}
+
+	if isDigit(rune(id[0])) {
+		var ok bool
+		if descr, ok = resolveO2D(id); !ok {
+			err = mkerr("Bad Refinement Item: unregistered objectClass numeric OID ", id)
+		}
+	} else if isAlpha(rune(id[0])) {
+		var ok bool
+		if _, ok = resolveD2O(id); !ok {
+			err = mkerr("Bad Refinement Item: unregistered objectClass descr OID ", id)
+			return
+		}
+		descr = id // resolved ok, return id as-is
+	} else {
+		err = mkerr("Bad Refinement Item; must be an objectClass numeric/descr OID")
+	}
+
+	return
+}
+
+func resolveO2D(o string) (d string, ok bool) {
+	if useRevMap() && o != "" {
+		var res []string
+		if res, ok = OIDRevMap[lc(o)]; !ok {
+			// return the original input
+			d = o
+		} else {
+			if len(res) > 0 && res[0] != "" {
+				d = res[0]
+			} else {
+				// return the original input
+				d = o
+			}
+		}
+	}
+
+	return
+}
+
+func resolveD2O(d string) (o string, ok bool) {
+	if OIDFwdMap != nil && len(OIDFwdMap) > 0 && d != "" {
+		if o, ok = OIDFwdMap[lc(d)]; !ok {
+			// return the original input
+			o = d
+		}
+	}
+
+	return
+}
+
+var (
+	OIDFwdMap = make(map[string]string)   // 1-to-1  (descr -> oid)
+	OIDRevMap = make(map[string][]string) // 1-to-1+ (oid -> descr(s))
+)

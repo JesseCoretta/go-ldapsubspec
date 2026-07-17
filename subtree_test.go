@@ -5,24 +5,38 @@ import (
 )
 
 func TestSubtreeSpecification(t *testing.T) {
+	RegisterOID(`2.5.6.4`, `organization`)
+	RegisterOID(`2.5.6.6`, `person`)
+	RegisterOID(`2.5.6.9`, `groupOfNames`)
+	RegisterOID(`2.5.6.14`, `device`)
+
 	// Verify parsing of valid string-based SubSpec values
-	for idx, raw := range []any{
-		`{base "n=1,n=4,n=1,n=6,n=3,n=1", minimum 1, maximum 1, specificationFilter and:{item:1.3.6.1.4.1,or:{item:cn,item:2.5.4.7}}}`,
-		`{base "n=1,n=4,n=1,n=6,n=3,n=1", minimum 1, maximum 1, specificationFilter or:{item:1.3.6.1.4.1,not:item:1.3.6.1.5.5,and:{item:cn,item:2.5.4.7}}}`,
-		`{base "n=1,n=4,n=1,n=6,n=3,n=1", minimum 1, maximum 1, specificationFilter item:1.3.6.1.4.1.56521}`,
-		`{minimum 1, maximum 1}`,
-		`{base "n=1,n=4,n=1,n=6,n=3,n=1", minimum 1, maximum 1, specificationFilter not:item:1.3.6.1.4.1.56521}`,
-		`{base "n=1,n=4,n=1,n=6,n=3,n=1", specificExclusions { chopBefore "n=14", chopAfter "n=555", chopAfter "n=74,n=6" }, minimum 1, maximum 1, specificationFilter item:1.3.6.1.4.1.56521}`,
-		`{}`,
-	} {
+	for idx, raw := range testSubSpecs {
 		if v, err := New(raw); err != nil {
 			t.Errorf("%s[%d] failed: %v", t.Name(), idx, err)
 			return
 		} else if got := v.String(); got != raw {
 			t.Errorf("%s[%d] failed:\n\twant: '%s'\n\tgot: '%s'",
 				t.Name(), idx, raw, got)
+		} else if f := v.SpecificationFilter; f != nil {
+			if err = f.Verify(); err != nil {
+				t.Errorf("%s[%d] failed: %v", t.Name(), idx, err)
+			}
 		}
 	}
+
+	OIDFwdMap = nil
+	OIDRevMap = nil
+}
+
+func BenchmarkSubtreeSpecificationParse(b *testing.B) {
+	b.StopTimer()
+	maxIdx := len(testSubSpecs)
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = New(testSubSpecs[i%maxIdx])
+	}
+
 }
 
 func TestSubtreeSpecification_codecov(t *testing.T) {
@@ -30,7 +44,7 @@ func TestSubtreeSpecification_codecov(t *testing.T) {
 	New(``)
 	New(`X`)
 	New(byte(33))
-	New(`{base "n=1,n=4,n=1,n=6,n=3,n=1", minimum -1, maximum 1, specificationFilter or:{item:1.3.6.1.4.1,not:item:1.3.6.1.5.5,and:{item:cn,item:2.5.4.7}}}`)
+	New(`{base "n=123456,n=1,n=4,n=1,n=6,n=3,n=1", minimum -1, maximum 1, specificationFilter or:{item:2.5.6.5,not:item:2.5.6.10,and:{item:person,item:2.5.6.14}}}`)
 
 	_, _, _ = subtreeBase(rune(11))
 	_, _, _ = subtreeBase(`value:...`)
@@ -111,4 +125,14 @@ func TestSubtreeSpecification_codecov(t *testing.T) {
 	parseNot("x")
 	parseComplexRefinement("and", "{bogus}")
 
+}
+
+var testSubSpecs []string = []string{
+	`{base "n=1,n=4,n=1,n=6,n=3,n=1", minimum 1, maximum 1, specificationFilter and:{item:organization,or:{item:person,item:device}}}`,
+	`{base "n=1,n=4,n=1,n=6,n=3,n=1", minimum 1, maximum 1, specificationFilter or:{item:organization,not:item:2.5.6.9,and:{item:person,item:2.5.6.14}}}`,
+	`{base "n=1,n=4,n=1,n=6,n=3,n=1", minimum 1, maximum 1, specificationFilter item:device}`,
+	`{minimum 1, maximum 1}`,
+	`{base "n=1,n=4,n=1,n=6,n=3,n=1", minimum 1, maximum 1, specificationFilter not:item:2.5.6.4}`,
+	`{base "n=1,n=4,n=1,n=6,n=3,n=1", specificExclusions { chopBefore "n=14", chopAfter "n=555", chopAfter "n=74,n=6" }, minimum 1, maximum 1, specificationFilter item:device}`,
+	`{}`,
 }
