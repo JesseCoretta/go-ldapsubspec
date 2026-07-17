@@ -44,7 +44,7 @@ func TestSubtreeSpecification_codecov(t *testing.T) {
 	New(``)
 	New(`X`)
 	New(byte(33))
-	New(`{base "n=123456,n=1,n=4,n=1,n=6,n=3,n=1", minimum -1, maximum 1, specificationFilter or:{item:2.5.6.5,not:item:2.5.6.10,and:{item:person,item:2.5.6.14}}}`)
+	New(`{base "n=123456,n=1,n=4,n=1,n=6,n=3,n=1", minimum -1, maximum 1, specificationFilter or:{item:2.5.6.5,not:item:2.5.6.4,and:{item:person,item:2.5.6.14}}}`)
 
 	_, _, _ = subtreeBase(rune(11))
 	_, _, _ = subtreeBase(`value:...`)
