@@ -10,9 +10,9 @@ import (
 )
 
 var (
-        runeLen  func(rune) int                          = utf8.RuneLen
-	ucIs     func(*unicode.RangeTable, rune) bool    = unicode.Is
-	ucIn     func(rune, ...*unicode.RangeTable) bool = unicode.In
+	runeLen func(rune) int                          = utf8.RuneLen
+	ucIs    func(*unicode.RangeTable, rune) bool    = unicode.Is
+	ucIn    func(rune, ...*unicode.RangeTable) bool = unicode.In
 )
 
 var runeSelf rune = utf8.RuneSelf
@@ -193,9 +193,9 @@ func init() {
 		{0x0061, 0x007A, 1},
 	}}
 
-        utf1Range = &unicode.RangeTable{R16: []unicode.Range16{
-                {0x0000, 0x007F, 1},
-        }}
+	utf1Range = &unicode.RangeTable{R16: []unicode.Range16{
+		{0x0000, 0x007F, 1},
+	}}
 
 	utf2aSafeRange = &unicode.RangeTable{R16: []unicode.Range16{
 		{0x00C0, 0x00DF, 1},
