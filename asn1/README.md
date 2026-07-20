@@ -1,6 +1,6 @@
 # asn1
 
-Package asn1 offers a basic ASN.1 encoder and decoder of [subspec.SubtreeSpecification] and all of its components therein.
+Package asn1 offers a basic ASN.1 DER encoder and decoder of subspec.SubtreeSpecification instances and all components therein.
 
 ## Example
 
