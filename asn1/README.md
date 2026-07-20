@@ -13,24 +13,23 @@ import (
 )
 
 func main() {
-	raw := `... your subtree specification string ...`
+	raw := `... your subtree specification string ...` // see unit tests for real values
 
-        spec, err := subspec.New(raw)
+	spec, err := subspec.New(raw)
 	// check err
 
-        var bts []byte
-        bts, err = ssasn1.Encode(spec)
+	var bts []byte
+	bts, err = ssasn1.Encode(spec)
 	// check err
 
 	var dest subspec.SubtreeSpecification
-        dest, err = ssasn1.Decode(bts)
+	dest, err = ssasn1.Decode(bts)
 	// check err
 
-        if d := dest.String(); raw != d {
-                panic(raw + " != " + d)
-        }
+	if d := dest.String(); raw != d {
+		panic(raw + " != " + d)
+	}
 
 	// No news is good news
-        return
 }
 ```
