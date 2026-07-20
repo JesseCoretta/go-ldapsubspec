@@ -6,7 +6,7 @@ import (
 	"github.com/JesseCoretta/go-ldapsubspec"
 )
 
-func BenchmarkCodec(b *testing.B) {
+func BenchmarkCodecRoundtrip(b *testing.B) {
 	var subs []subspec.SubtreeSpecification
 	for i := 0; i < len(testSubSpecs); i++ {
 		spec, _ := subspec.New(testSubSpecs[i])
