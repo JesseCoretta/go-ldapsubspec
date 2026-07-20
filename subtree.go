@@ -358,80 +358,76 @@ func (r SpecificExclusion) String() (s string) {
 	return
 }
 
-func subtreeExclusions(raw string, begin int) (excl SpecificExclusions, end int, err error) {
-	end = -1
+func findMatchingBrace(s string, startIdx int) int {
+	depth := 0
+	for i := startIdx; i < len(s); i++ {
+		switch s[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
 
-	if raw[begin] != '{' {
+func subtreeExclusions(raw string, begin int) (excl SpecificExclusions, end int, err error) {
+	// find the actual '{' (skip spaces)
+	for begin < len(raw) && raw[begin] == ' ' {
+		begin++
+	}
+	if begin >= len(raw) || raw[begin] != '{' {
 		err = mkerr("Bad exclusion encapsulation")
 		return
 	}
 
-	var pos int
-	if pos, end, err = deconstructExclusions(raw, begin); err != nil {
+	// find matching closing brace
+	match := findMatchingBrace(raw, begin)
+	if match == -1 {
+		err = mkerr("Unmatched brace in specificExclusions")
 		return
 	}
 
-	values := fields(raw[pos:end])
+	// content inside braces
+	content := raw[begin+1 : match]
+	// split into top-level parts like: `chopBefore "ou=Payroll"` etc.
+	parts := splitRefinementParts(content)
 
-	for i := 0; i < len(values); i += 2 {
-		var ex SpecificExclusion
-		if !strInSlice(values[i], []string{`chopBefore`, `chopAfter`}) {
-			err = mkerr("Unexpected key '", values[i], "'")
-			break
-
+	for _, p := range parts {
+		p = trimS(p)
+		if p == "" {
+			continue
 		}
-		after := values[i] == `chopAfter`
 
-		localName := trim(trimR(values[i+1], `,`), `"`)
-		if err = isSafeUTF8(localName); err == nil {
-			if after {
-				ex.ChopAfter = LocalName(localName)
-			} else {
-				ex.ChopBefore = LocalName(localName)
-			}
-			excl = append(excl, ex)
+		// split into key and value. value may contain spaces/commas so split only once.
+		kv := splitN(p, " ", 2)
+		if len(kv) != 2 {
+			err = mkerr("Malformed specificExclusions part: ", p)
+			return
 		}
+		key := trimS(kv[0])
+		val := trimS(kv[1])
+		val = trim(val, `"`) // remove surrounding quotes if present
+
+		if key != "chopBefore" && key != "chopAfter" {
+			err = mkerr("Unexpected key '", key, "'")
+			return
+		}
+
+		ex := SpecificExclusion{}
+		if key == "chopBefore" {
+			ex.ChopBefore = LocalName(val)
+		} else {
+			ex.ChopAfter = LocalName(val)
+		}
+		excl = append(excl, ex)
 	}
 
-	return
-}
-
-func deconstructExclusions(raw string, begin int) (pos, end int, err error) {
-	pos = -1
-	if idx := stridx(raw[begin:], `chop`); idx != -1 {
-		var (
-			before int = -1
-			after  int = -1
-		)
-
-		if hasPfx(raw[begin+idx+4:], `Before`) {
-			before = begin + idx
-		}
-
-		if hasPfx(raw[begin+idx+4:], `After`) {
-			after = begin + idx
-		}
-
-		if after == -1 && before > after {
-			pos = before
-		} else if before == -1 && before < after {
-			pos = after
-		}
-	}
-
-	if pos == -1 {
-		err = mkerr("No chop directive found in value")
-		return
-	}
-
-	for i, char := range raw[pos:] {
-		switch char {
-		case '}':
-			end = pos + i
-			break
-		}
-	}
-
+	// end is number of bytes consumed from begin
+	end = match - begin + 1
 	return
 }
 
@@ -901,19 +897,15 @@ func (r RefinementItem) Choice() string {
 
 /*
 Len always returns the integer 1 (one).  This method only exists to satisfy
-Go's interface signature requirements.
+Go's interface signature requirement with respect to [Refinement].
 */
-func (r RefinementItem) Len() int {
-	return 1
-}
+func (r RefinementItem) Len() int { return 1 }
 
 /*
-Index returns the receiver instance of [Refinement]. This method only
-exists to satisfy Go's interface signature requirement.
+Index always returns the receiver instance as-is.  This method only exists to satisfy
+Go's interface signature requirement with respect to [Refinement].
 */
-func (r RefinementItem) Index(_ int) Refinement {
-	return r
-}
+func (r RefinementItem) Index(_ int) Refinement { return r }
 
 func subtreeBase(x any) (base LocalName, end int, err error) {
 	end = -1
@@ -1022,28 +1014,59 @@ func parseComplexRefinement(input, prefix string) (Refinement, error) {
 	return RefinementOr(refs), nil
 }
 
+// splitRefinementParts splits input on top-level commas while respecting nested braces
+// and quoted strings. It returns trimmed parts (but does not remove surrounding quotes).
 func splitRefinementParts(input string) []string {
 	var parts []string
-	currentPart := newStrBuilder()
+	var sb = newStrBuilder()
 	depth := 0
+	inQuote := false
+	escape := false
 
-	for _, char := range input {
-		if char == '{' {
-			depth++
-		} else if char == '}' {
-			depth--
+	for _, r := range input {
+		if escape {
+			// previous char was backslash, include this char verbatim
+			sb.WriteRune(r)
+			escape = false
+			continue
 		}
 
-		if char == ',' && depth == 0 {
-			parts = append(parts, trimS(currentPart.String()))
-			currentPart.Reset()
-		} else {
-			currentPart.WriteRune(char)
+		if r == '\\' && inQuote {
+			escape = true
+			sb.WriteRune(r)
+			continue
 		}
+
+		if r == '"' {
+			inQuote = !inQuote
+			sb.WriteRune(r)
+			continue
+		}
+
+		if !inQuote {
+			if r == '{' {
+				depth++
+			} else if r == '}' {
+				if depth > 0 {
+					depth--
+				}
+			}
+		}
+
+		if r == ',' && depth == 0 && !inQuote {
+			part := trimS(sb.String())
+			if part != "" {
+				parts = append(parts, part)
+			}
+			sb.Reset()
+			continue
+		}
+
+		sb.WriteRune(r)
 	}
 
-	if currentPart.Len() > 0 {
-		parts = append(parts, trimS(currentPart.String()))
+	if s := trimS(sb.String()); s != "" {
+		parts = append(parts, s)
 	}
 
 	return parts

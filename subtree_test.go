@@ -14,7 +14,6 @@ func TestSubtreeSpecification(t *testing.T) {
 	for idx, raw := range testSubSpecs {
 		if v, err := New(raw); err != nil {
 			t.Errorf("%s[%d] failed: %v", t.Name(), idx, err)
-			return
 		} else if got := v.String(); got != raw {
 			t.Errorf("%s[%d] failed:\n\twant: '%s'\n\tgot: '%s'",
 				t.Name(), idx, raw, got)
@@ -62,7 +61,6 @@ func TestSubtreeSpecification_codecov(t *testing.T) {
 
 	_, _, _ = subtreeExclusions("{", 0)
 	_, _, _ = subtreeExclusions("{chopBefore:cn=y,chopAfter:cn=x}", 0)
-	_, _, _ = deconstructExclusions("{chopAfter:cn=x}", 0)
 
 	var orref RefinementOr
 	orref.Push(nil)
@@ -128,11 +126,15 @@ func TestSubtreeSpecification_codecov(t *testing.T) {
 }
 
 var testSubSpecs []string = []string{
+	`{}`,
 	`{base "n=1,n=4,n=1,n=6,n=3,n=1", minimum 1, maximum 1, specificationFilter and:{item:organization,or:{item:person,item:device}}}`,
 	`{base "n=1,n=4,n=1,n=6,n=3,n=1", minimum 1, maximum 1, specificationFilter or:{item:organization,not:item:2.5.6.9,and:{item:person,item:2.5.6.14}}}`,
 	`{base "n=1,n=4,n=1,n=6,n=3,n=1", minimum 1, maximum 1, specificationFilter item:device}`,
 	`{minimum 1, maximum 1}`,
 	`{base "n=1,n=4,n=1,n=6,n=3,n=1", minimum 1, maximum 1, specificationFilter not:item:2.5.6.4}`,
-	`{base "n=1,n=4,n=1,n=6,n=3,n=1", specificExclusions { chopBefore "n=14", chopAfter "n=555", chopAfter "n=74,n=6" }, minimum 1, maximum 1, specificationFilter item:device}`,
-	`{}`,
+	`{base "ou=Accounts,dc=example,dc=com", specificExclusions { chopBefore "ou=Payroll", chopAfter "ou=Executives", chopAfter "ou=Vendors" }, minimum 1, maximum 1, specificationFilter not:item:device}`,
+	`{base "ou=Accounts,dc=example,dc=com", specificExclusions { chopBefore "ou=Payroll", chopAfter "ou=Executives", chopAfter "ou=Vendors" }, minimum 1, maximum 1, specificationFilter item:device}`,
+	`{base "n=1,n=4,n=1,n=6,n=3,n=1", specificExclusions { chopBefore "n=14", chopAfter "n=555", chopAfter "n=74,n=6" }, minimum 1, maximum 1, specificationFilter not:and:{item:device,item:person}}`,
+	`{base "n=1,n=4,n=1,n=6,n=3,n=1", specificExclusions { chopBefore "n=14", chopAfter "n=555", chopAfter "n=74,n=6" }, minimum 1, maximum 1, specificationFilter and:{item:device,item:person}}`,
+	`{base "n=1,n=4,n=1,n=6,n=3,n=1", specificExclusions { chopBefore "n=14", chopAfter "n=555", chopAfter "n=74,n=6" }, minimum 1, maximum 1, specificationFilter or:{item:organization,not:item:2.5.6.9,and:{item:person,item:2.5.6.14}}}`,
 }
