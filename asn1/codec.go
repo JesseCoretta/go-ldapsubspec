@@ -1,7 +1,7 @@
 package asn1
 
 /*
-asn1.go implements SubtreeSpecification ASN.1 DER encoding/decoding.
+codec.go implements SubtreeSpecification ASN.1 DER encoding/decoding.
 */
 
 import (
