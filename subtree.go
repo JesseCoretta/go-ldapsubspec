@@ -7,10 +7,8 @@ subtree.go implements the RFC3672 SubtreeSpecification.
 /*
 SubtreeSpecification implements the Subtree Specification construct.
 
-At present, instances of this type are not ASN.1 encode-friendly due
-to the use of an interface type for [Refinement] instances. This is
-because Go's [encoding/asn1] package does not play nicely with such
-types.
+It can be ASN.1 DER encoded and decoded using the provided asn1
+package subdirectory.
 
 A zero instance of this type is equal to "{}" when represented as a
 string value, which is a valid default value when populated for an
